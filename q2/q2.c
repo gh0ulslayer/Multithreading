@@ -10,9 +10,11 @@
 #include <sys/time.h>
 #define pnf(k) printf("%s", k);
 
-int i, n, m, s;
+int i, n, m, s, waitingggg = 0;
 int student_vaccined = 0 , student_rem, yet_to_be ,students_came = 0;
-pthread_mutex_t student_gaya;
+pthread_mutex_t student_gonee;
+pthread_mutex_t debug_lock;
+
 
 //all structs start from ere
 typedef struct Pharmacompany
@@ -56,21 +58,21 @@ void preparing_vaccines( Pharmacompany *pc )
 	srand(t1.tv_usec * t1.tv_sec);
 	while(1)
 	{
-		if ( student_rem == 0 ) //All students vaccinated
+		if ( !student_rem  ) //All students vaccinated
 			break;
-		pc -> state = 1;
 		pc -> stud_vaccined = 10 + rand() % 11 ;
-		pc -> second = 2 + rand() % 4;
+		pc -> state = 1;
 		pc -> no_of_batches = 1 + rand() & 5;
+		pc -> second = 2 + rand() % 4;
 		if ( pc -> stud_vaccined > student_rem ) 
 		{
 			pc -> no_of_batches = 1;
 			pc -> stud_vaccined = 1 + rand() % student_rem;
 		}
 		pc -> state = 2;
-		printf("Pharma Company %d is preparing  %d batches of vaccine with %d capacity each which have prob $$\n" , pc -> company_no, pc -> no_of_batches, pc -> stud_vaccined);
+		printf("Pharma Company %d is preparing  %d batches of vaccine with %d capacity each which have prob %1.2f\n" , pc -> company_no, pc -> no_of_batches, pc -> stud_vaccined , pc -> efficiency);
 		sleep( pc -> second );
-		printf("Pharma Company %d has prepared %d batches of vaccine with %d capacity each which have prob $$\n" , pc -> company_no, pc -> no_of_batches, pc -> stud_vaccined);
+		printf("Pharma Company %d has prepared %d batches of vaccine with %d capacity each which have prob %1.2f\n" , pc -> company_no, pc -> no_of_batches, pc -> stud_vaccined , pc -> efficiency);
 		vaccine_ready(pc);
 	}
 	pthread_exit(NULL);
@@ -81,7 +83,7 @@ void vaccine_ready( Pharmacompany *pc )
 	int noo = pc -> no_of_batches;
 	while (noo)
 	{
-		if ( student_rem == 0 )
+		if ( !student_rem )
 		{
 			pthread_mutex_unlock(&zones[i].lockbatch);
 			return;
@@ -92,9 +94,10 @@ void vaccine_ready( Pharmacompany *pc )
 			if (zones[i].capacity < 1 && zones[i].state == 0 )
 			{
 				noo--;
-				printf("Pharmaceutical Company %d is delivering a vaccine batch to Vaccination Zone %d which has success probability $$\n", pc -> company_no ,i);
+				printf("Pharmaceutical Company %d is delivering a vaccine batch to Vaccination Zone %d which has success probability %1.2f\n", pc -> company_no ,i, pc -> efficiency);
 				zones[i].state = 2; //filled
 				zones[i].capacity = pc -> stud_vaccined;
+				zones[i].curr_efficiency = pc -> efficiency;
 			}
 			if ( noo == 0 )
 			{
@@ -102,7 +105,7 @@ void vaccine_ready( Pharmacompany *pc )
 				pthread_mutex_unlock(&zones[i].lockbatch);
 				return;
 			}
-			if ( student_rem == 0 )
+			if ( ! student_rem )
 			{
 				pthread_mutex_unlock(&zones[i].lockbatch);
 				return;
@@ -131,7 +134,7 @@ void zone_wait( VZone *v)
 			v -> vaccined = 0;
 			ready_to_vaccinate(v);
 		}
-		if ( student_rem == 0 ) break;
+		if ( ! student_rem ) break;
 		if ( v -> capacity == 0 )
 		{
 			printf("Vaccination Zone %d is waiting for the next batch of vaccines\n", v -> Vzone_no );
@@ -145,7 +148,7 @@ void ready_to_vaccinate( VZone *v )
 {
 	while(1)
 	{
-		if ( student_rem == 0 ) return;
+		if ( ! student_rem ) return;
 		int tslot = v -> slots;
 		v -> state = 1;
 		if (tslot == 0)
@@ -180,54 +183,89 @@ void student_coming(int ridd)
 
 void student_wait( stud *st )
 {
-	printf("Student %d has arrived for his %d round of Vaccination.\n", st -> student_num , st -> round_no );
-	printf("Student %d is waiting to be allocated a slot on a Vaccination Zone.\n", st -> student_num );
-
-	while( st -> state !=1 )
+	while ( st -> round_no < 4 )
 	{
-		if ( ! st -> state )
+		printf("Student %d has arrived for his %d round of Vaccination.\n", st -> student_num , st -> round_no );
+		printf("Student %d is waiting to be allocated a slot on a Vaccination Zone.\n", st -> student_num );
+		waitingggg++;
+		while( st -> state !=1 )
 		{
-			for(int i = 1 ; i <= m ; i++)
+			if ( ! st -> state )
 			{
-				pthread_mutex_lock(&zones[i].lockbatch);
-				if (  zones[i].state == 1  && zones[i].slots > 0 && zones[i].slots != zones[i].vaccined )
+				for(int i = 1 ; i <= m ; i++)
 				{
-					st -> state = 2;
-					printf("Student %d assigned a slot on the Vaccination Zone %d and waiting to be vaccinated.\n", st -> student_num , zones[i].Vzone_no );
-					st -> zone_no = i;
-					zones[i].vaccined++;
-					student_vaccined++;
+					pthread_mutex_lock(&zones[i].lockbatch);
+					if (  zones[i].state == 1  && zones[i].slots > 0 && zones[i].slots != zones[i].vaccined )
+					{
+						st -> state = 2;
+						printf("Student %d assigned a slot on the Vaccination Zone %d and waiting to be vaccinated.\n", st -> student_num , zones[i].Vzone_no );
+						waitingggg--;
+						st -> zone_no = i;
+						zones[i].vaccined++;
+						
+						pthread_mutex_unlock(&zones[i].lockbatch);
+						break;
+					}
 					pthread_mutex_unlock(&zones[i].lockbatch);
-					break;
 				}
-				pthread_mutex_unlock(&zones[i].lockbatch);
 			}
-		}
-		if ( st -> state == 2 )
-		{
-			while ( zones[ st -> zone_no ].vaccined != zones[ st -> zone_no ].slots )
+			if ( st -> state == 2 )
 			{
-				if ( student_vaccined == s ) break;
+				while ( 1 ) 
+				{
+					if (zones[ st -> zone_no ].vaccined == zones[ st -> zone_no ].slots ) break;
+					if ( waitingggg == 0 ) break;
+				}
+				studdd_vaccine(st);
 			}
-			studdd_vaccine(st);
 		}
+		pthread_mutex_lock(&student_gonee);
+		student_rem--;
+		pthread_mutex_unlock(&student_gonee);
 	}
-	pthread_mutex_lock(&student_gaya);
-	student_rem--;
-	pthread_mutex_unlock(&student_gaya);
 	pthread_exit(NULL);
 }
 
 void studdd_vaccine( stud *st )
 {
 	int p = st -> zone_no;
-	st -> state = 1;
-	printf("Student %d on Vaccination Zone %d has been vaccinated which has success probability $$\n", st -> student_num , p );
+	printf("Student %d on Vaccination Zone %d has been vaccinated which has success probability %1.2f\n", st -> student_num , p , zones[p].curr_efficiency);
+	
+	int ss = rand() % 101;
+	int prob = zones[p].curr_efficiency * 100;
+
+	if ( ss < prob )
+	{
+		printf("Student %d has tested 'positive' for antibodies\n", st -> student_num );
+		st -> state = 1;
+		st -> round_no = 5;
+		
+	}
+	else
+	{
+		printf("Student %d has tested 'negative' for antibodies\n", st -> student_num );
+		if ( st -> round_no > 3 )
+		{
+			st -> state = 1;
+			st -> round_no  = 5;
+		}
+		else
+		{
+			st -> round_no++;
+			st -> state = 0;
+			pthread_mutex_lock(&zones[i].lockbatch);
+			zones[p].vaccined--;
+			zones[p].capacity--;
+			zones[p].slots--;
+			pthread_mutex_unlock(&zones[i].lockbatch);
+			student_wait(st);
+		}
+	}
 	pthread_mutex_lock(&zones[i].lockbatch);
-	zones[p].vaccined--;
-	zones[p].capacity--;
-	zones[p].slots--;
-	pthread_mutex_unlock(&zones[i].lockbatch);
+		zones[p].vaccined--;
+		zones[p].capacity--;
+		zones[p].slots--;
+		pthread_mutex_unlock(&zones[i].lockbatch);
 }
 
 int main(void)
@@ -245,8 +283,12 @@ int main(void)
 
 	student_rem = s;
 	yet_to_be = s;
+	float pp;
 	for(int i = 1 ; i <= n ; i++)
 	{
+		printf("Enter the probability : ");
+		scanf("%f", &pp);
+		pharmacompanies[i].efficiency = pp;
 		pharmacompanies[i].company_no = i;
 		pharmacompanies[i].state = 0;
 	}
@@ -275,9 +317,11 @@ int main(void)
 		pthread_create(&zones[i].thread_ID, NULL, (void *)zone_wait , &zones[i]);
 	
 	for(int i = 1 ; i <= s ; i++)
-		students[i].round_no = 0;
+		students[i].round_no = 1;
 
-	pthread_mutex_init(&student_gaya , NULL);
+	pthread_mutex_init(&student_gonee , NULL);
+	pthread_mutex_init(&debug_lock , NULL);
+
 	pthread_t student_cam;
 	pthread_create(&student_cam , NULL , (void *)student_coming , &students_came );
 	while(s > students_came)
