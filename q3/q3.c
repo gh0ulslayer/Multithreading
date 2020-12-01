@@ -437,7 +437,7 @@ int main(void)
 		sem_init(&acous[i].mutex, 0, 2);
 	}
 	
-	for(int i = 0;i < a; i++)
+	for(int i = 0;i < e; i++)
 	{
 		elec[i].prev = '0';
 		sem_init(&elec[i].mutex, 0, 2);
